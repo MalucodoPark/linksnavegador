@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Favoritos Ultimate</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-size: var(--bg-zoom, cover);
+      background-repeat: no-repeat;
+      background-position: var(--bg-pos, center center);
+      font-family: var(--fonte-ativa, Arial), sans-serif;
+    }
+        html, body {
+      height: 100%;
+    }
+    .grid {
+      display: grid;
+      padding: 10px;
+      box-sizing: border-box;
+      height: calc(100vh - 120px); /* altura total da tela menos topo estimado */
+      overflow-y: auto;
+    }
+    header {
+      background: rgba(0,0,0,0.6);
+      color: white;
+      padding: 10px;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+    .cell {
+      text-align: center;
+      cursor: pointer;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+    .cell img {
+      width: 32px;
+      height: 32px;
+    }
+    /* Ajustes para o .config-panel */
+    .config-panel {
+      position: fixed;
+      top: 15px;
+      bottom: 10px;
+      right: 10px;
+      background: #222;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+      color: white;
+      border: none;
+      padding: 10px;
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 999;
+      overflow-y: auto;
+
+      max-height: calc(100vh - 80px); /* altura total - topo do painel - margem inferior */
+    }
+    /* Ajustes para os botões de configuração */
+    #configButtons {
+      position: fixed;
+      bottom: 21px; /* Garante que os botões fiquem 20px acima do rodapé da tela (e da barra de tarefas) */
+      right: 20px;
+      z-index: 1001;
+      display: flex;
+      gap: 12px;
+    }
+    /* Estilo para cada bloco de configuração (papel de parede, ícones, fonte etc.) */
+    .config-panel > div {
+      flex: 1 1 auto;
+      border: 2px solid #444;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: #1a1a1a;
+      box-sizing: border-box;
+      margin-bottom: 8px;
+    }
+
+    .hidden { display: none; }
+    #editButton.editing {
+      background-color: #e53935;
+      color: white;
+    }
+    .menu-btn {
+    background: #222;
+    color: #fff;
+    border: none;
+    padding: 10px 18px;
+    margin: 4px;
+    font-size: 14px;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+    transition: background 0.3s, transform 0.2s;
+  }
+
+  .menu-btn:hover {
+    background: #333;
+    transform: translateY(-2px);
+  }
+    @media (max-height: 700px) {
+    .config-panel {
+      max-height: calc(100vh - 120px); /* garante que a rolagem apareça só se for realmente necessário */
+    }
+  }
+  #configButtons button {
+    background: white;
+    color: black;
+    font-weight: bold;
+    padding: 8px 18px;
+    border: 1px solid #999;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+
+  #configButtons button:hover {
+    background: #eee;
+  }
+  </style>
+</head>
+<body>
+
+  <!-- 🔳 Modal de Reset -->
+  <div id="resetConfigModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:#00000088; z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:#222; padding:20px; border-radius:10px; color:white; width:300px; text-align:center;">
+      <p>Deseja realmente resetar TODAS as configurações para o padrão?</p>
+      <button onclick="doResetConfig()">✅ Confirmar</button>
+      <button onclick="closeResetModal()">❌ Cancelar</button>
+    </div>
+  </div>
+
+  <!-- 🔳 Tela de Carregamento -->
+  <div id="loadingScreen" style="
+    position:fixed;
+    top:0; left:0;
+    width:100vw; height:100vh;
+    background:#111;
+    color:#fff;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    flex-direction:column;
+    font-family:sans-serif;
+    z-index:99999;
+  ">
+    <div style="margin-bottom: 20px;">🔄 Carregando configurações...</div>
+    <div style="width: 200px; height: 6px; background: #444; border-radius: 3px; overflow: hidden;">
+      <div id="loadingBar" style="width: 0%; height: 100%; background: #0f0; transition: width 0.3s;"></div>
+    </div>
+  </div>
+
+  <!-- 🔳 Modal de Edição -->
+  <div id="editModal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #00000088; z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background:#222; padding:20px; border-radius:10px; color:white; width:300px;">
+      <h3>Editar Favorito</h3>
+      <label>URL: <input type="text" id="modalUrl" style="width:100%"></label><br><br>
+      <label>Nome: <input type="text" id="modalName" style="width:100%"></label><br><br>
+      <label>Ícone:
+        <input type="text" id="modalIcon" style="width:100%">
+      </label><br>
+      <input type="file" id="iconUpload" accept="image/*" onchange="handleIconUpload()" style="margin-top: 5px;"><br><br>
+      <button onclick="saveModal()">Salvar</button>
+      <button onclick="closeModal()">Fechar</button>
+    </div>
+  </div>
+
+  <!-- 🔳 Modal de Confirmação de Limpeza -->
+  <div id="confirmClearModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:#00000088; z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:#222; padding:20px; border-radius:10px; color:white; width:300px; text-align:center;">
+      <p>Deseja realmente apagar todos os favoritos?</p>
+      <button onclick="doClearFavorites()">Confirmar</button>
+      <button onclick="closeClearModal()">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- 🔳 Busca Google -->
+  <div id="googleSearchBox" style="margin: 10px auto; max-width: 600px; background: rgba(0, 0, 0, 0.6); padding: 16px; border-radius: 10px; text-align: center; position: relative; top: 0;">
+    <input type="text" id="googleInput" placeholder="Buscar no Google"
+           onkeydown="if(event.key==='Enter') searchGoogle()"
+           style="width: 90%; padding: 14px; font-size: 18px; border-radius: 6px; border: none; outline: none;">
+    <button onclick="searchGoogle()" class="menu-btn" style="margin-top: 10px;">🔍 Buscar</button>
+  </div>
+
+  <!-- 🔳 Botão flutuante do menu -->
+  <button onclick="toggleTopbar()" class="menu-btn" style="position: fixed; top: 10px; left: 10px; z-index: 9999;">☰ Menu</button>
+
+  <!-- 🔳 Barra superior -->
+  <header id="topbar">
+    <button class="menu-btn" onclick="resetarTudo()">⚠️ Resetar Tudo</button>
+    <button class="menu-btn" onclick="clearFavorites()">🧹 Limpar</button>
+    <button class="menu-btn" onclick="exportFavorites()">💾 Exportar</button>
+    <button class="menu-btn" onclick="toggleConfig()">⚙️ Configurações</button>
+    <button class="menu-btn" id="editButton" onclick="toggleEditMode()">✏️ Editar</button>
+    <button class="menu-btn" onclick="toggleGoogleSearch()">🔍 Google</button>
+  </header>
+
+  <!-- 🔳 Grade de favoritos -->
+  <div class="grid" id="favoritesGrid"></div>
+
+  <!-- 🔳 Painel de configurações -->
+  <div class="config-panel" id="configPanel">
+
+    <!-- 🔹 Botões Aplicar e Fechar -->
+    <div style="text-align:center; margin-top: 10px;">
+      <button onclick="applyConfig()" class="menu-btn">✅ Aplicar</button>
+      <button onclick="toggleConfig()" class="menu-btn" style="margin-left: 10px;">❌ Fechar</button>
+    </div>
+<!-- 🔹 Papel de Parede -->
+<div style="margin-bottom: 16px; position: relative; width: 100%; max-width: 580px;">
+  <div style="position: absolute; top: -14px; left: 12px; background: #111; padding: 0 8px; font-weight: bold; border-radius: 6px; color: white;">
+    🖼️ Papel de Parede
+  </div>
+
+  <div style="border: 1px solid #ccc; padding: 16px; padding-top: 30px; border-radius: 10px; background: #1a1a1a; color: white;">
+
+    <!-- Grade de direção -->
+    <div style="display: flex; justify-content: flex-start; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
+
+      <!-- Setas -->
+      <div style="display: grid; grid-template-columns: 40px 40px 40px; grid-template-rows: 40px 40px 40px; gap: 4px;">
+        <div></div>
+        <button onclick="adjustWallpaper('top')" style="font-size: 18px; border-radius: 6px;">⬆️</button>
+        <div></div>
+        <button onclick="adjustWallpaper('left')" style="font-size: 18px; border-radius: 6px;">⬅️</button>
+        <button onclick="adjustWallpaper('center')" style="font-size: 18px; border-radius: 6px;">🔲</button>
+        <button onclick="adjustWallpaper('right')" style="font-size: 18px; border-radius: 6px;">➡️</button>
+        <div></div>
+        <button onclick="adjustWallpaper('bottom')" style="font-size: 18px; border-radius: 6px;">⬇️</button>
+        <div></div>
+      </div>
+
+      <!-- Campos Imagem e Cor -->
+      <div style="flex: 1; min-width: 220px;">
+        <label for="wallpaperInput" style="font-weight: bold;">Imagem:</label><br>
+        <input type="file" id="wallpaperInput" accept="image/*" style="margin-bottom: 10px;"><br>
+
+        <label for="bgColor" style="font-weight: bold;">Cor de Fundo:</label><br>
+        <input type="color" id="bgColor" value="#000000" oninput="applyConfig()" style="margin-bottom: 10px;"><br>
+
+        <label for="bgOpacity" style="font-weight: bold;">Opacidade:</label><br>
+        <input type="range" id="bgOpacity" min="0.1" max="1" step="0.1" value="0.5"
+               oninput="this.nextElementSibling.value=this.value; applyConfig()" style="width: 100%;">
+        <output for="bgOpacity" style="margin-left: 6px;">0.5</output>
+      </div>
+    </div>
+
+    <!-- Zoom abaixo das setas -->
+    <div style="display: flex; justify-content: center; gap: 20px; margin-top: 16px;">
+      <button onclick="adjustZoom('out')" style="font-size: 18px; padding: 10px 14px; border-radius: 8px; background: #333; color: white; border: none; cursor: pointer;">🔍 -</button>
+      <button onclick="adjustZoom('in')" style="font-size: 18px; padding: 10px 14px; border-radius: 8px; background: #333; color: white; border: none; cursor: pointer;">🔍 +</button>
+    </div>
+
+  </div>
+</div>
+
+
+  <!-- 🔹 Layout da Grade -->
+  <div style="margin-bottom: 24px; position: relative;">
+    <div style="position: absolute; top: -14px; left: 16px; background: #111; padding: 0 8px; font-weight: bold; border-radius: 6px; color: white;">
+      🧱 Layout da Grade
+    </div>
+
+    <div style="border: 1px solid #ccc; padding: 10px 16px 20px; border-radius: 10px; background: #1a1a1a; color: white;">
+      <label for="gridGap">Espaçamento (gap px):</label>
+      <input type="range" id="gridGap" min="0" max="50" step="1" value="10" oninput="this.nextElementSibling.value=this.value; applyConfig()">
+      <output for="gridGap">10</output><br><br>
+
+      <label for="gridCols">Colunas:</label>
+      <input type="number" id="gridCols" value="9" oninput="applyConfig()"><br><br>
+
+      <label for="gridRows">Linhas:</label>
+      <input type="number" id="gridRows" value="9" oninput="applyConfig()">
+    </div>
+  </div>
+
+  <!-- 🔹 Ícones e Borda -->
+  <div style="margin-bottom: 20px; position: relative;">
+    <div style="position: absolute; top: -14px; left: 16px; background: #111; padding: 0 8px; font-weight: bold; border-radius: 6px; color: white;">
+      🧩 Ícones e Borda
+    </div>
+
+    <div style="border: 1px solid #ccc; padding: 7px 16px 20px; border-radius: 10px; background: #1a1a1a; color: white;">
+      <label for="iconSize">Tamanho do Ícone (px):</label>
+      <input type="range" id="iconSize" min="16" max="128" step="1" value="32" oninput="this.nextElementSibling.value=this.value; applyConfig()">
+      <output for="iconSize">32</output><br><br>
+
+      <label for="iconBorderRadius">Cantos Arredondados do Ícone (px):</label>
+      <input type="range" id="iconBorderRadius" min="0" max="50" step="1" value="0" oninput="this.nextElementSibling.value=this.value; applyConfig()">
+      <output for="iconBorderRadius">0</output><br><br>
+      
+      <label for="borderRadius">Cantos Arredondados (px):</label>
+      <input type="range" id="borderRadius" min="0" max="50" step="1" value="0" oninput="this.nextElementSibling.value=this.value; applyConfig()">
+      <output for="borderRadius">0</output><br><br>
+
+      <label for="borderWidth">Borda (px):</label>
+      <input type="range" id="borderWidth" min="0" max="10" step="1" value="0" oninput="this.nextElementSibling.value=this.value; applyConfig()">
+      <output for="borderWidth">0</output><br><br>
+
+      <label for="borderColor">Cor da Borda:</label>
+      <input type="color" id="borderColor" value="#000000" oninput="applyConfig()">
+    </div>
+  </div>
+
+  <!-- 🔹 Fonte -->
+  <div style="margin-bottom: -100px; position: relative;">
+    <div style="position: absolute; top: -14px; left: 16px; background: #111; padding: 0 8px; font-weight: bold; border-radius: 6px; color: white;">
+      🔤 Fonte
+    </div>
+
+    <div style="border: 1px solid #ccc; padding: 10px 16px 20px; border-radius: 10px; background: #1a1a1a; color: white;">
+      <label for="fontSelect">Fonte:</label>
+      <select id="fontSelect" onchange="applyConfig()">
+        <option value="Arial">Arial</option>
+        <option value="Verdana">Verdana</option>
+        <option value="Tahoma">Tahoma</option>
+      </select><br><br>
+
+      <label for="fontColor">Cor da Fonte:</label>
+      <input type="color" id="fontColor" value="#ffffff" oninput="applyConfig()"><br><br>
+
+      <label for="fontSize">Tamanho da Fonte (px):</label>
+      <input type="range" id="fontSize" min="8" max="48" step="1" value="14" oninput="this.nextElementSibling.value=this.value; applyConfig()">
+      <output for="fontSize">14</output><br><br>
+
+      <label><input type="checkbox" id="fontBold" onchange="applyConfig()"> Negrito</label><br>
+      <label><input type="checkbox" id="fontItalic" onchange="applyConfig()"> Itálico</label><br>
+      <label><input type="checkbox" id="textShadow" onchange="applyConfig()"> Sombra da Fonte</label>
+    </div>
+  </div>
+    
+<!-- 🔳 Modal de confirmação para deletar 1 favorito -->
+<div id="confirmDeleteFavoriteModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:#00000088; z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:#222; padding:20px; border-radius:10px; color:white; width:300px; text-align:center;">
+    <p>Deseja remover este favorito?</p>
+    <button onclick="confirmDeleteFavorite()" style="background: #4caf50; color: white; padding: 8px 16px; margin: 6px; border: none; border-radius: 6px; cursor: pointer;">✅ Sim</button>
+    <button onclick="cancelDeleteFavorite()" style="background: #e53935; color: white; padding: 8px 16px; margin: 6px; border: none; border-radius: 6px; cursor: pointer;">❌ Não</button>
+  </div>
+</div>    
+
+    
+</body>
+<script>
+// 🔧 Variáveis para controle do modo de edição
+let editingIndex = null;  // Índice do favorito sendo editado
+let editMode = false;     // Flag para modo de edição
+
+// 🟢 Alternar modo de edição
+function toggleEditMode() {
+  editMode = !editMode;
+  const button = document.getElementById("editButton");
+  button.textContent = editMode ? "Encerrar Modo de Edição" : "Entrar no Modo de Edição";
+  button.classList.toggle("editing", editMode);
+  renderFavorites(); // Atualiza favoritos com base no modo
+}
+
+// 🟢 Mostrar ou esconder painel de configurações
+function toggleConfig() {
+  const panel = document.getElementById("configPanel");
+  panel.style.display = panel.style.display === "flex" ? "none" : "flex";
+}
+
+// 🟢 Mostrar ou esconder a barra do topo
+function toggleTopbar() {
+  document.getElementById("topbar").classList.toggle("hidden");
+}
+
+// 🔴 Fecha o modal de edição
+function closeModal() {
+  document.getElementById("editModal").style.display = "none";
+  editingIndex = null;
+}
+
+function resetarTudo() {
+  document.getElementById("resetConfigModal").style.display = "flex";
+}
+
+function closeResetModal() {
+  document.getElementById("resetConfigModal").style.display = "none";
+}
+
+function doResetConfig() {
+  localStorage.clear();
+  closeResetModal();
+  location.reload();
+}
+  
+
+function preencherFormularioConfig() {
+  const cfg = JSON.parse(localStorage.getItem("config") || "{}");
+
+  document.getElementById("fontSelect").value = cfg.font || "Arial";
+  document.getElementById("textShadow").checked = cfg.shadow || false;
+  document.getElementById("bgColor").value = cfg.bgColor || "#000000";
+  document.getElementById("bgOpacity").value = cfg.opacity || 0.5;
+  document.getElementById("gridGap").value = cfg.gap || 10;
+  document.getElementById("gridCols").value = cfg.cols || 9;
+  document.getElementById("gridRows").value = cfg.rows || 9;
+  document.getElementById("fontSize").value = cfg.fontSize || 14;
+  document.getElementById("borderWidth").value = cfg.borderWidth || 0;
+  document.getElementById("borderColor").value = cfg.borderColor || "#000000";
+  document.getElementById("borderRadius").value = cfg.borderRadius || 0;
+  document.getElementById("iconSize").value = cfg.iconSize || 32;
+  document.getElementById("iconBorderRadius").value = cfg.iconBorderRadius || 0; // <--- ADICIONE ESTA LINHA
+  document.getElementById("fontColor").value = cfg.fontColor || "#ffffff";
+  document.getElementById("fontBold").checked = cfg.fontBold || false;
+  document.getElementById("fontItalic").checked = cfg.fontItalic || false;
+
+  // Atualizar os <output> também, se estiver usando <output> ao lado dos ranges
+  const outputs = {
+    gridGap: "gridGap",
+    fontSize: "fontSize",
+    borderWidth: "borderWidth",
+    borderRadius: "borderRadius",
+    iconSize: "iconSize",
+    iconBorderRadius: "iconBorderRadius", // <--- ADICIONE ESTA LINHA
+    bgOpacity: "bgOpacity"
+  };
+
+  for (const [id, outId] of Object.entries(outputs)) {
+    const input = document.getElementById(id);
+    const output = input.nextElementSibling;
+    if (output && output.tagName.toLowerCase() === "output") {
+      output.value = input.value;
+    }
+  }
+}
+  
+  
+// 🟢 Salvar configurações personalizadas e aplicar em tempo real
+function applyConfig() {
+  const config = {
+    font: document.getElementById("fontSelect").value,
+    shadow: document.getElementById("textShadow").checked,
+    bgColor: document.getElementById("bgColor").value,
+    opacity: document.getElementById("bgOpacity").value,
+    gap: document.getElementById("gridGap").value,
+    cols: document.getElementById("gridCols").value,
+    rows: document.getElementById("gridRows").value,
+    fontSize: document.getElementById("fontSize").value,
+    borderWidth: document.getElementById("borderWidth").value,
+    borderColor: document.getElementById("borderColor").value,
+    borderRadius: document.getElementById("borderRadius").value,
+    iconSize: document.getElementById("iconSize").value,
+    iconBorderRadius: document.getElementById("iconBorderRadius").value, // <--- ADICIONE ESTA LINHA
+    fontColor: document.getElementById("fontColor").value,
+    fontBold: document.getElementById("fontBold").checked,
+    fontItalic: document.getElementById("fontItalic").checked,
+  };
+  localStorage.setItem("config", JSON.stringify(config)); // salva no navegador
+  renderFavorites(); // reaplica estilo
+}
+
+// 🔴 Apagar todos os favoritos
+function clearFavorites() {
+  document.getElementById("confirmClearModal").style.display = "flex";
+}
+
+function closeClearModal() {
+  document.getElementById("confirmClearModal").style.display = "none";
+}
+
+function doClearFavorites() {
+  localStorage.removeItem("favorites");
+  closeClearModal();
+  renderFavorites();
+}
+
+// 🟢 Exportar favoritos + configs + papel de parede como arquivo JS
+function exportFavorites() {
+  const favs = localStorage.getItem("favorites") || "[]";
+  const config = localStorage.getItem("config") || "{}";
+  const wallpaper = localStorage.getItem("wallpaper") || "";
+  const bgPos = localStorage.getItem("bgPos") || "center center";
+  const bgZoom = localStorage.getItem("bgZoom") || "100";
+
+  const blob = new Blob([`
+    window.FAVORITOS = ${favs};
+    window.CONFIG = ${config};
+    window.WALLPAPER = "${wallpaper}";
+    window.BGPOS = "${bgPos}";
+    window.BGZOOM = "${bgZoom}";
+  `], { type: "application/javascript" });
+
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "favoritos.js";
+  a.click();
+}
+
+// 🟢 Quando arrastar e soltar algo em um slot
+function handleDrop(e, i) {
+  e.preventDefault();
+
+  if (!editMode) return; // Só permite se estiver em modo de edição
+
+  const url = e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain");
+  if (!url) return;
+
+  // Preenche o modal com a URL arrastada e valores padrão
+  document.getElementById("modalUrl").value = url;
+  document.getElementById("modalName").value = ""; // ou você pode tentar gerar automaticamente depois
+  document.getElementById("modalIcon").value = "icons/default.png";
+  editingIndex = i;
+
+  // Mostra o modal
+  document.getElementById("editModal").style.display = "flex";
+}
+
+// 🔴 Salvar favorito pelo modal (AJUSTADO PARA OBTENÇÃO AUTOMÁTICA DE FAVICON)
+async function saveModal() {
+    if (editingIndex === null) return;
+    const favs = JSON.parse(localStorage.getItem("favorites") || "[]");
+
+    const url = document.getElementById("modalUrl").value.trim(); // Trim para remover espaços
+    const name = document.getElementById("modalName").value;
+    let icon = document.getElementById("modalIcon").value.trim(); // Trim para remover espaços
+
+    // 1. Prioriza o ícone definido pelo usuário
+    // Verifica se o campo de ícone não está vazio e não é o valor padrão
+    if (icon === "" || icon === "icons/default.png") {
+        // Se o ícone não foi definido pelo usuário, tenta obter o favicon
+        if (url) {
+            let processedUrl = url;
+            // Adiciona protocolo se ausente para new URL() funcionar
+            if (!/^https?:\/\//i.test(processedUrl)) {
+                processedUrl = 'http://' + processedUrl;
+            }
+
+            try {
+                const domain = new URL(processedUrl).hostname;
+                // Tenta obter o favicon usando a Google S2 Favicon API
+                const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+                icon = faviconUrl;
+            } catch (error) {
+                console.warn("Não foi possível obter o favicon para:", url, error); // Console.warn para erros não críticos
+                icon = "icons/default.png"; // Fallback para ícone padrão em caso de erro ou URL inválida
+            }
+        } else {
+            icon = "icons/default.png"; // Se não houver URL, usa o ícone padrão
+        }
+    }
+
+    favs[editingIndex] = {
+        url: url,
+        name: name,
+        icon: icon,
+    };
+    localStorage.setItem("favorites", JSON.stringify(favs));
+    closeModal();
+    renderFavorites();
+}
+
+// 🔃 Recria todos os blocos de favoritos com base na config
+function renderFavorites() {
+  const grid = document.getElementById("favoritesGrid");
+  grid.innerHTML = "";
+
+  const favs = JSON.parse(localStorage.getItem("favorites") || "[]");
+  const cfg = JSON.parse(localStorage.getItem("config") || "{}");
+
+  cfg.iconSize = cfg.iconSize || 32;
+  cfg.fontColor = cfg.fontColor || "#000000";
+  cfg.fontBold = cfg.fontBold || false;
+  cfg.fontItalic = cfg.fontItalic || false;
+
+  document.body.style.setProperty('--fonte-ativa', cfg.font || 'Arial');
+  grid.style.gridTemplateColumns = `repeat(${cfg.cols || 9}, 1fr)`;
+  grid.style.gridTemplateRows = `repeat(${cfg.rows || 9}, 100px)`;
+  grid.style.gap = `${cfg.gap || 10}px`;
+
+  for (let i = 0; i < (cfg.cols || 9) * (cfg.rows || 9); i++) {
+    const c = document.createElement("div");
+    c.className = "cell";
+    c.style.backgroundColor = hexToRgba(cfg.bgColor || "#000000", cfg.opacity || 0.5);
+    c.style.fontSize = `${cfg.fontSize || 14}px`;
+    c.style.color = cfg.fontColor;
+    c.style.fontWeight = cfg.fontBold ? "bold" : "normal";
+    c.style.fontStyle = cfg.fontItalic ? "italic" : "normal";
+    c.style.border = `${cfg.borderWidth || 0}px solid ${cfg.borderColor}`;
+    c.style.textShadow = cfg.shadow ? "1px 1px 3px #000000aa" : "none";
+    c.style.borderRadius = `${cfg.borderRadius || 0}px`;
+
+    c.setAttribute("ondragover", "event.preventDefault()");
+    c.setAttribute("ondrop", `handleDrop(event, ${i})`);
+
+    if (favs[i]) {
+      // Cria o conteúdo principal (ícone + nome)
+      let content = `
+        <div style="position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+          <img src="${favs[i].icon}" style="width:${cfg.iconSize}px; height:${cfg.iconSize}px;">
+          <small style="margin-top:2px;">${favs[i].name}</small>
+          ${editMode ? `<button onclick="deleteFavorite(${i})" title="Excluir" style="position: absolute; top: 4px; right: 4px; background: none; border: none; color: red; font-size: 16px; cursor: pointer;">🗑️</button>` : ""}
+        </div>
+      `;
+
+      c.innerHTML = content;
+
+      if (editMode) {
+        // Quando clicado em modo edição, abre o modal preenchido
+        c.onclick = () => {
+          const item = favs[i];
+          document.getElementById("modalUrl").value = item.url || "";
+          document.getElementById("modalName").value = item.name || "";
+          document.getElementById("modalIcon").value = item.icon || "icons/default.png";
+          editingIndex = i;
+          document.getElementById("editModal").style.display = "flex";
+        };
+      } else {
+        // Ação normal: abrir link
+        c.onclick = () => window.open(favs[i].url, "_blank");
+      }
+    } else {
+      // Slot vazio com ícone "+"
+      c.innerHTML = `<span style='font-size: 24px; color: gray;'>+</span>`;
+      if (editMode) {
+        c.onclick = () => {
+          document.getElementById("modalUrl").value = "";
+          document.getElementById("modalName").value = "";
+          document.getElementById("modalIcon").value = "icons/default.png";
+          editingIndex = i;
+          document.getElementById("editModal").style.display = "flex";
+        };
+      } else {
+        c.onclick = null;
+      }
+    }
+
+    grid.appendChild(c);
+  }
+}
+
+function deleteFavorite(index) {
+  const favs = JSON.parse(localStorage.getItem("favorites") || "[]");
+  if (!confirm("Deseja apagar este favorito?")) return;
+  favs.splice(index, 1); // remove o item da posição
+  localStorage.setItem("favorites", JSON.stringify(favs));
+  renderFavorites(); // atualiza a grade
+}  
+  
+function toggleGoogleSearch() {
+  const box = document.getElementById("googleSearchBox");
+  box.style.display = box.style.display === "none" ? "block" : "none";
+}
+
+function searchGoogle() {
+  const q = document.getElementById("googleInput").value.trim();
+  if (q) {
+    window.open(`https://www.google.com/search?q=${encodeURIComponent(q)}`, "_blank");
+  }
+}
+
+function toggleTopbar() {
+  const bar = document.getElementById("topbar");
+  bar.style.display = bar.style.display === "none" ? "flex" : "none";
+}  
+
+// 🎨 Converte cor HEX para RGBA (com opacidade)
+function hexToRgba(hex, opacity) {
+  const bigint = parseInt(hex.slice(1), 16);
+  const r = (bigint >> 16) & 255, g = (bigint >> 8) & 255, b = bigint & 255;
+  return `rgba(${r},${g},${b},${opacity})`;
+}
+
+  function hideLoading() {
+  const loading = document.getElementById("loadingScreen");
+  if (loading) loading.style.display = "none";
+}
+// 🟢 Ao carregar a página
+window.onload = () => {
+  // Aplica posições já salvas no navegador
+  const pos = localStorage.getItem("bgPos");
+  if (pos) document.body.style.setProperty('--bg-pos', pos);
+
+  const zoom = localStorage.getItem("bgZoom");
+  if (zoom) document.body.style.setProperty('--bg-zoom', `${zoom}%`);
+
+  // Tenta carregar o script exportado
+  const s = document.createElement("script");
+  s.src = "./favoritos.js";
+
+  s.onload = () => {
+    if (window.FAVORITOS) {
+      localStorage.setItem("favorites", JSON.stringify(window.FAVORITOS));
+    }
+
+    if (window.CONFIG) {
+      localStorage.setItem("config", JSON.stringify(window.CONFIG));
+    }
+
+    if (window.WALLPAPER) {
+      localStorage.setItem("wallpaper", window.WALLPAPER);
+      document.body.style.backgroundImage = `url(${window.WALLPAPER})`;
+    }
+
+    if (window.BGPOS) {
+      localStorage.setItem("bgPos", window.BGPOS);
+      document.body.style.setProperty('--bg-pos', window.BGPOS);
+    }
+
+    if (window.BGZOOM) {
+      localStorage.setItem("bgZoom", window.BGZOOM);
+      document.body.style.setProperty('--bg-zoom', `${window.BGZOOM}%`);
+    }
+
+    renderFavorites();
+    preencherFormularioConfig(); // ✅ Preenche os campos com base no config
+    hideLoading();               // ✅ Esconde tela de carregamento
+  };
+
+  s.onerror = () => {
+    // Se não tiver favoritos.js e nem imagem salva, carrega imagem padrão
+    if (!localStorage.getItem("wallpaper")) {
+      const padrao = "wallpaper/fundo-padrao.jpg";
+      document.body.style.backgroundImage = `url(${padrao})`;
+    }
+
+    renderFavorites();
+    preencherFormularioConfig(); // ✅ Preenche mesmo se não carregou favoritos.js
+    hideLoading();
+  };
+
+  document.body.appendChild(s);
+};
+
+
+
+// 🖼️ Quando o usuário envia nova imagem de fundo
+document.getElementById("wallpaperInput").addEventListener("change", function(event) {
+  const file = event.target.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const imageData = e.target.result;
+      localStorage.setItem("wallpaper", imageData);
+      localStorage.setItem("bgPos", "center center");
+      localStorage.setItem("bgZoom", "100");
+      document.body.style.setProperty('--bg-zoom', "100%");
+      document.body.style.backgroundImage = `url(${imageData})`;
+      document.body.style.setProperty('--bg-pos', "center center");
+      document.body.style.setProperty('--bg-zoom', "cover");
+    };
+    reader.readAsDataURL(file);
+  }
+});
+
+// 🧭 Altera posição do papel de parede
+function adjustWallpaper(direction) {
+  const map = {
+    left: "left center",
+    center: "center center",
+    right: "right center",
+    top: "center top",
+    bottom: "center bottom"
+  };
+  const pos = map[direction] || "center center";
+  document.body.style.setProperty('--bg-pos', pos);
+  localStorage.setItem("bgPos", pos);
+}
+
+// 🔍 Altera zoom do fundo
+function adjustZoom(inOrOut) {
+  let currentZoom = parseInt(localStorage.getItem("bgZoom") || "100");
+  const step = 10;
+  currentZoom = inOrOut === "in" ? currentZoom + step : currentZoom - step;
+  currentZoom = Math.max(10, Math.min(currentZoom, 500));
+  document.body.style.setProperty('--bg-zoom', `${currentZoom}%`);
+  localStorage.setItem("bgZoom", currentZoom);
+}
+// 🖼️ Lidar com envio de imagem de ícone personalizada
+function handleIconUpload() {
+  const fileInput = document.getElementById("iconUpload");
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    const base64Icon = e.target.result;
+    document.getElementById("modalIcon").value = base64Icon; // preenche o campo com o ícone em base64
+  };
+  reader.readAsDataURL(file);
+}
+
+  
+</script>
+</body>
+</html>
